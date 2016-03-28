@@ -11,8 +11,31 @@ import (
 )
 
 // PostGISPoint is wrapper for PostGIS POINT type.
+type PostGISPointNull struct {
+	Lon, Lat float64
+	Valid    bool
+}
+
 type PostGISPoint struct {
 	Lon, Lat float64
+}
+
+// Value implements database/sql/driver Valuer interface.
+// It returns point as WKT with SRID 4326 (WGS 84).
+func (p PostGISPointNull) Value() (driver.Value, error) {
+	if !p.Valid {
+		return nil, nil
+	}
+	return []byte(fmt.Sprintf("SRID=4326;POINT(%.8f %.8f)", p.Lon, p.Lat)), nil
+}
+
+func (p PostGISPointNull) MarshalJSON() ([]byte, error) {
+	if !p.Valid {
+		return []byte("null"), nil
+	}
+
+	return []byte(fmt.Sprintf(`{"Lon": %.8f, "Lat": %.8f}`, p.Lon, p.Lat)), nil
+
 }
 
 // Value implements database/sql/driver Valuer interface.
@@ -30,6 +53,40 @@ type ewkbPoint struct {
 
 // Scan implements database/sql Scanner interface.
 // It expectes EWKB with SRID 4326 (WGS 84).
+func (p *PostGISPointNull) Scan(value interface{}) error {
+	if value == nil {
+		*p = PostGISPointNull{}
+		return nil
+	}
+
+	v, ok := value.([]byte)
+	if !ok {
+		return fmt.Errorf("pq_types: expected []byte, got %T (%v)", value, value)
+	}
+
+	println("pq-types", string(v))
+
+	ewkb := make([]byte, hex.DecodedLen(len(v)))
+	n, err := hex.Decode(ewkb, v)
+	if err != nil {
+		return err
+	}
+
+	var ewkbP ewkbPoint
+	err = binary.Read(bytes.NewReader(ewkb[:n]), binary.LittleEndian, &ewkbP)
+	if err != nil {
+		return err
+	}
+
+	if ewkbP.ByteOrder != 1 || ewkbP.WkbType != 0x20000001 || ewkbP.SRID != 4326 {
+		return fmt.Errorf("pq_types: unexpected ewkb %#v", ewkbP)
+	}
+	*p = PostGISPointNull{Lon: ewkbP.Point.Lon, Lat: ewkbP.Point.Lat, Valid: true}
+	return nil
+}
+
+// Scan implements database/sql Scanner interface.
+// It expectes EWKB with SRID 4326 (WGS 84).
 func (p *PostGISPoint) Scan(value interface{}) error {
 	if value == nil {
 		*p = PostGISPoint{}
@@ -40,6 +97,12 @@ func (p *PostGISPoint) Scan(value interface{}) error {
 	if !ok {
 		return fmt.Errorf("pq_types: expected []byte, got %T (%v)", value, value)
 	}
+
+	println("pq-types", string(v))
+	/*if v == []byte("NULL") {
+			*p = PostGISPoint{}
+			return nil
+	        }*/
 
 	ewkb := make([]byte, hex.DecodedLen(len(v)))
 	n, err := hex.Decode(ewkb, v)
