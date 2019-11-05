@@ -64,8 +64,6 @@ func (p *PostGISPointNull) Scan(value interface{}) error {
 		return fmt.Errorf("pq_types: expected []byte, got %T (%v)", value, value)
 	}
 
-	println("pq-types", string(v))
-
 	ewkb := make([]byte, hex.DecodedLen(len(v)))
 	n, err := hex.Decode(ewkb, v)
 	if err != nil {
@@ -97,12 +95,6 @@ func (p *PostGISPoint) Scan(value interface{}) error {
 	if !ok {
 		return fmt.Errorf("pq_types: expected []byte, got %T (%v)", value, value)
 	}
-
-	println("pq-types", string(v))
-	/*if v == []byte("NULL") {
-			*p = PostGISPoint{}
-			return nil
-	        }*/
 
 	ewkb := make([]byte, hex.DecodedLen(len(v)))
 	n, err := hex.Decode(ewkb, v)
