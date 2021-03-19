@@ -6,6 +6,7 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -35,7 +36,28 @@ func (p PostGISPointNull) MarshalJSON() ([]byte, error) {
 	}
 
 	return []byte(fmt.Sprintf(`{"Lon": %.8f, "Lat": %.8f}`, p.Lon, p.Lat)), nil
+}
 
+func (p *PostGISPointNull) UnmarshalJSON(buf []byte) error {
+
+	if len(buf) == 0 || string(buf) == "null" {
+		p.Valid = false
+		return nil
+	}
+
+	v := struct {
+		Lat float64
+		Lon float64
+	}{}
+
+	err := json.Unmarshal(buf, &v)
+	if err == nil {
+		p.Valid = v.Lat != 0 && v.Lon != 0
+		p.Lat = v.Lat
+		p.Lon = v.Lon
+	}
+
+	return err
 }
 
 // Value implements database/sql/driver Valuer interface.
